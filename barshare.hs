@@ -46,34 +46,47 @@ sumV :: Vector -> Vector -> Vector
 minusV :: Vector -> Vector -> Vector
 v1 `minusV` v2 = v1 `sumV` (negateV v2)
 
+{-
 mulV :: Vector -> Double -> Vector
 (x1, y1) `mulV` s = (x1 * s, y1 * s)
+-}
 
 distance :: Point -> Point -> Double
 distance (ax, ay) (bx, by) = sqrt $ ((ax - bx) ** 2) + ((ay - by) ** 2)
 
 
 
-incItem b = b { item = item' }
-  where
-    i = item b
-    item' = i { code = code i + 1 }
 
-collide :: Bubble -> Bubble -> (Bubble, Bubble)
-collide a b | radius a + radius b < distance (pos a) (pos b) = (a, b)
-            | otherwise = ( incItem $ a { direction = dira' }
-                          , incItem $ b { direction = dirb' })
+colides :: [Bubble] -> [Bubble]
+colides []     = []
+colides (a:as) = a' : colides as'
+  where (a', as') = case partition (checkColide a) as of
+                     ([],   bs) -> (a, bs)
+                     (c:cs, bs) -> (a'', b'':(cs ++ bs))
+                        where (a'', b'') = colide a c
+        checkColide x y = radius x + radius y > distance (pos x) (pos y)
+
+
+colide :: Bubble -> Bubble -> (Bubble, Bubble)
+colide a b = (a', b')
+--  | radius a + radius b > distance (pos a) (pos b) = (a', b')
+--  | otherwise                                      = (a, b)
   where
-    --(ax, ay) = pos a
-    --(bx, by) = pos b
-    dira' = direction a `minusV` (direction a `minusV` direction b `mulV` 1.05)
-    dirb' = direction b `minusV` (direction b `minusV` direction a `mulV` 1.05)
+        a' = incItem $ a { direction = dira', pos = posa' }
+        b' = incItem $ b { direction = dirb', pos = posb' }
+        cva = direction a `minusV` direction b
+        cvb = direction b `minusV` direction a
+        dira' = direction a `minusV` cva
+        dirb' = direction b `minusV` cvb
+        posa' = pos a `minusV` cva
+        posb' = pos b `minusV` cvb
+        incItem bub = bub { item = item' }
+          where
+            i = item bub
+            item' = i { code = code i + 1 }
 
 resolve :: Point -> [Bubble] -> [Bubble]
-resolve _ []        = []
-resolve lm (b:[])   = [move lm b]
-resolve lm (a:b:bs) = (move lm a'):(resolve lm (b':bs))
-  where (a', b') = (collide a b)
+resolve lm bs = map (move lm) (colides bs)
 
 -- | Perform the physics of the bubbles
 physics :: Point -> Model -> IO Model
@@ -82,7 +95,7 @@ physics d bs = return $ resolve d (sortBubbles bs)
 -- | Basic picture of an Item
 itemShape :: Bubble -> Picture ()
 itemShape bubble = do
-  checkColor (state i) $ fill $ circle p (price i * ammount i)
+  checkColor (state i) $ fill $ circle p (radius bubble)
   color (RGB 0 0 0) $ text p (show $ code i)
   where checkColor Unpaid = color (RGB 255 0 0)
         checkColor Paid   = color (RGB 0 255 0)
